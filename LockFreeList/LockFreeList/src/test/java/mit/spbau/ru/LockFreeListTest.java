@@ -8,7 +8,7 @@ import java.util.List;
 
 public class LockFreeListTest {
 
-    private List<Integer> set;
+    private ILockFreeList<Integer> set;
 
     @Before
     public void setUp() {
@@ -16,16 +16,16 @@ public class LockFreeListTest {
     }
 
     @Test
-    public void add() throws Exception {
-        Assert.assertTrue(set.add(10));
+    public void append() throws Exception {
+        set.append(10);
         Assert.assertTrue(set.contains(10));
-        Assert.assertTrue(set.add(20));
+        set.append(20);
         Assert.assertTrue(set.contains(20));
-        Assert.assertTrue(set.add(5));
+        set.append(5);
         Assert.assertTrue(set.contains(5));
-        Assert.assertFalse(set.add(5));
-        Assert.assertFalse(set.add(10));
-        Assert.assertFalse(set.add(20));
+        set.append(5);
+        set.append(10);
+        set.append(20);
         Assert.assertTrue(set.contains(5));
         Assert.assertTrue(set.contains(10));
         Assert.assertTrue(set.contains(20));
@@ -33,22 +33,22 @@ public class LockFreeListTest {
 
     @Test
     public void remove() throws Exception {
-        add();
-        Assert.assertTrue(set.add(40));
+        append();
+        set.append(40);
         Assert.assertTrue(set.contains(40));
-        Assert.assertTrue(set.add(1));
+        set.append(1);
         Assert.assertTrue(set.contains(1));
-        Assert.assertTrue(set.remove(Integer.valueOf(10)));
+        Assert.assertTrue(set.remove(10));
         Assert.assertFalse(set.contains(10));
-        Assert.assertTrue(set.remove(Integer.valueOf(1)));
+        Assert.assertTrue(set.remove(1));
         Assert.assertFalse(set.contains(1));
-        Assert.assertTrue(set.remove(Integer.valueOf(40)));
+        Assert.assertTrue(set.remove(40));
         Assert.assertFalse(set.contains(40));
-        Assert.assertTrue(set.remove(Integer.valueOf(5)));
+        Assert.assertTrue(set.remove(5));
         Assert.assertFalse(set.contains(5));
-        Assert.assertTrue(set.remove(Integer.valueOf(20)));
+        Assert.assertTrue(set.remove(20));
         Assert.assertFalse(set.contains(20));
-        Assert.assertFalse(set.remove(Integer.valueOf(20)));
+        Assert.assertFalse(set.remove(20));
     }
 
     @Test
@@ -59,11 +59,11 @@ public class LockFreeListTest {
     @Test
     public void isEmpty() throws Exception {
         Assert.assertTrue(set.isEmpty());
-        add();
+        append();
         Assert.assertFalse(set.isEmpty());
-        Assert.assertTrue(set.remove(Integer.valueOf(5)));
-        Assert.assertTrue(set.remove(Integer.valueOf(10)));
-        Assert.assertTrue(set.remove(Integer.valueOf(20)));
+        Assert.assertTrue(set.remove(5));
+        Assert.assertTrue(set.remove(10));
+        Assert.assertTrue(set.remove(20));
         Assert.assertTrue(set.isEmpty());
         remove();
         Assert.assertTrue(set.isEmpty());
