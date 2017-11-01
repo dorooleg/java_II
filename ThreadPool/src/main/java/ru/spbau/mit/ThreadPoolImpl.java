@@ -25,10 +25,18 @@ public class ThreadPoolImpl implements ThreadPool {
             tasks.put(future.getId(), future);
             tasks.notifyAll();
         }
-        synchronized (future) {
-            future.notify();
-        }
         return future;
+    }
+
+    public void add(final FutureTask futureTask) {
+        Objects.requireNonNull(futureTask);
+        synchronized (tasks) {
+            tasks.put(futureTask.getId(), futureTask);
+            tasks.notifyAll();
+        }
+        synchronized (futureTask) {
+            futureTask.notifyAll();
+        }
     }
 
     FutureTask tryPop(final long taskId) {
@@ -39,11 +47,10 @@ public class ThreadPoolImpl implements ThreadPool {
 
     private FutureTask tryPop() {
         synchronized (tasks) {
-            try {
-                return tasks.remove(tasks.entrySet().iterator().next().getKey());
-            } catch (NoSuchElementException d) {
+            if (tasks.isEmpty()) {
                 return null;
             }
+            return tasks.remove(tasks.entrySet().iterator().next().getKey());
         }
     }
 
@@ -52,7 +59,7 @@ public class ThreadPoolImpl implements ThreadPool {
             for (FutureTask task : tasks.values()) {
                 task.stop();
                 synchronized (task) {
-                    task.notify();
+                    task.notifyAll();
                 }
             }
             tasks.clear();
