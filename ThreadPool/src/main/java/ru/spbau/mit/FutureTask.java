@@ -47,7 +47,7 @@ public class FutureTask<T> implements LightFuture<T> {
 
         while (!isReady && exception == null) {
 
-            final FutureTask<? extends Object> task = threadPool.tryPop(id);
+            final FutureTask task = threadPool.tryPop(id);
 
             if (task != null) {
                 run();
@@ -97,7 +97,7 @@ public class FutureTask<T> implements LightFuture<T> {
         try {
             result = task.get();
         } catch (Exception e) {
-            result = null;
+            exception = new LightExecutionException(e);
         }
 
         synchronized (dependencies) {
