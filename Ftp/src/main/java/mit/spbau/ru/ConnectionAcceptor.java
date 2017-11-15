@@ -9,8 +9,8 @@ import java.util.LinkedList;
 
 public class ConnectionAcceptor implements Runnable {
 
+    private final LinkedList<Socket> clients = new LinkedList<>();
     private ServerSocket socket;
-    private LinkedList<Socket> clients = new LinkedList<>();
 
     public ConnectionAcceptor(@NotNull ServerSocket socket) {
         this.socket = socket;
