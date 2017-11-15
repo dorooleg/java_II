@@ -6,11 +6,11 @@ import java.util.function.Supplier;
 public class ThreadPoolImpl implements ThreadPool {
 
     private final List<Thread> threads;
-    private final Hashtable<Long, FutureTask> tasks;
+    private final LinkedHashSet<FutureTask> tasks;
 
     ThreadPoolImpl(final int size) {
         threads = new ArrayList<>(size);
-        tasks = new Hashtable<>();
+        tasks = new LinkedHashSet<>();
         for (int i = 0; i < size; i++) {
             Thread thread = new Thread(new ThreadHandler());
             threads.add(thread);
@@ -22,7 +22,7 @@ public class ThreadPoolImpl implements ThreadPool {
         Objects.requireNonNull(task);
         final FutureTask<T> future = new FutureTask<>(task, this);
         synchronized (tasks) {
-            tasks.put(future.getId(), future);
+            tasks.add(future);
             tasks.notifyAll();
         }
         return future;
@@ -31,7 +31,7 @@ public class ThreadPoolImpl implements ThreadPool {
     public void add(final FutureTask futureTask) {
         Objects.requireNonNull(futureTask);
         synchronized (tasks) {
-            tasks.put(futureTask.getId(), futureTask);
+            tasks.add(futureTask);
             tasks.notifyAll();
         }
         synchronized (futureTask) {
@@ -39,9 +39,12 @@ public class ThreadPoolImpl implements ThreadPool {
         }
     }
 
-    FutureTask tryPop(final long taskId) {
+    FutureTask tryPop(FutureTask task) {
         synchronized (tasks) {
-            return tasks.remove(taskId);
+            if (tasks.remove(task)) {
+                return task;
+            }
+            return null;
         }
     }
 
@@ -50,13 +53,15 @@ public class ThreadPoolImpl implements ThreadPool {
             if (tasks.isEmpty()) {
                 return null;
             }
-            return tasks.remove(tasks.entrySet().iterator().next().getKey());
+            FutureTask task = tasks.iterator().next();
+            tasks.remove(task);
+            return task;
         }
     }
 
     public void shutdown() {
         synchronized (tasks) {
-            for (FutureTask task : tasks.values()) {
+            for (FutureTask task : tasks) {
                 task.stop();
                 synchronized (task) {
                     task.notifyAll();

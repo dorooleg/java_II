@@ -7,11 +7,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class FutureTask<T> implements LightFuture<T> {
-
-    // Must be atomic. incrementAndGet
-    private static long globalId;
     private final Supplier<T> task;
-    private final long id;
     private final ThreadPoolImpl threadPool;
     private final List<FutureTask> dependencies = new ArrayList<>();
     private volatile T result;
@@ -23,13 +19,6 @@ public class FutureTask<T> implements LightFuture<T> {
         Objects.requireNonNull(threadPool);
         this.task = task;
         this.threadPool = threadPool;
-        synchronized (FutureTask.class) {
-            id = globalId++;
-        }
-    }
-
-    long getId() {
-        return id;
     }
 
     void stop() {
@@ -46,8 +35,12 @@ public class FutureTask<T> implements LightFuture<T> {
     public synchronized T get() throws LightExecutionException {
 
         while (!isReady && exception == null) {
+            if (Thread.currentThread().isInterrupted()) {
+                exception = new LightExecutionException();
+                break;
+            }
 
-            final FutureTask task = threadPool.tryPop(id);
+            final FutureTask task = threadPool.tryPop(this);
 
             if (task != null) {
                 run();
