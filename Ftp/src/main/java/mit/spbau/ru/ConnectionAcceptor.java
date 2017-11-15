@@ -1,14 +1,18 @@
 package mit.spbau.ru;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.LinkedList;
 
 public class ConnectionAcceptor implements Runnable {
 
     private ServerSocket socket;
+    private LinkedList<Socket> clients = new LinkedList<>();
 
-    public ConnectionAcceptor(ServerSocket socket) {
+    public ConnectionAcceptor(@NotNull ServerSocket socket) {
         this.socket = socket;
     }
 
@@ -22,6 +26,10 @@ public class ConnectionAcceptor implements Runnable {
                     continue;
                 }
 
+                synchronized (clients) {
+                    clients.add(client);
+                }
+
                 new Thread(new ConnectionHandler(client)).start();
 
             } catch (IOException e) {
@@ -29,6 +37,18 @@ public class ConnectionAcceptor implements Runnable {
                     return;
                 }
             }
+        }
+    }
+
+    public void stop() {
+        synchronized (clients) {
+            for (Socket socket : clients) {
+                try {
+                    socket.close();
+                } catch (IOException ignored) {
+                }
+            }
+            clients.clear();
         }
     }
 }

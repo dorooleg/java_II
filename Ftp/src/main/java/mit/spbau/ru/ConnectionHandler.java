@@ -1,6 +1,7 @@
 package mit.spbau.ru;
 
 import org.apache.poi.util.IOUtils;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
 import java.net.Socket;
@@ -15,9 +16,8 @@ public class ConnectionHandler implements Runnable {
 
     private Socket socket;
 
-    public ConnectionHandler(Socket socket) {
+    public ConnectionHandler(@NotNull Socket socket) {
         this.socket = socket;
-
     }
 
     @Override

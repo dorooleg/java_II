@@ -7,6 +7,7 @@ public class Server implements IServer {
 
     private ServerSocket socket;
     private Thread mainThread;
+    private ConnectionAcceptor acceptor;
     private int port;
 
     public Server(int port) {
@@ -25,7 +26,8 @@ public class Server implements IServer {
             return false;
         }
 
-        mainThread = new Thread(new ConnectionAcceptor(socket));
+        acceptor = new ConnectionAcceptor(socket);
+        mainThread = new Thread(acceptor);
         mainThread.start();
 
         return true;
@@ -40,14 +42,14 @@ public class Server implements IServer {
         try {
             socket.close();
         } catch (IOException ignored) {
-        } finally {
-
         }
 
         try {
             mainThread.join();
         } catch (InterruptedException ignored) {
         }
+
+        acceptor.stop();
 
         socket = null;
     }
