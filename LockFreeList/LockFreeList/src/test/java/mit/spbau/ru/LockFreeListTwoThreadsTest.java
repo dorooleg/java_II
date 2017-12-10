@@ -5,7 +5,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
@@ -13,7 +12,6 @@ import java.util.stream.IntStream;
 public class LockFreeListTwoThreadsTest {
     private AtomicLong sum = new AtomicLong();
     private AtomicLong sub = new AtomicLong();
-    private long res;
     private ILockFreeList<Integer> set;
     private Random random = new Random();
     private volatile boolean barrier = true;
@@ -26,14 +24,16 @@ public class LockFreeListTwoThreadsTest {
     @Test
     public void testMultipleThread() throws InterruptedException {
         Thread inserter = new Thread(() -> {
-            IntStream.range(0, 10000000).forEach(y ->
-                    IntStream.range(0, 1000000).peek(x -> set.append(x))
+            IntStream.range(0, 100).forEach(y -> {
+                        IntStream.range(0, 100).forEach(x -> set.append(x));
+                        Assert.assertFalse(set.isEmpty());
+                    }
             );
         });
 
         Thread deleter = new Thread(() -> {
-            IntStream.range(0, 10000000).forEach(y ->
-                    IntStream.range(0, 1000000).filter(x -> x % 2 == 0).peek(x -> set.remove(x))
+            IntStream.range(0, 100).forEach(y ->
+                    IntStream.range(0, 100).filter(x -> x % 2 == 0).forEach(x -> set.remove(x))
             );
         });
 
@@ -43,7 +43,12 @@ public class LockFreeListTwoThreadsTest {
         inserter.join();
         deleter.join();
 
-        IntStream.range(0, 1000000).filter(x -> x % 2 == 0).peek(x -> Assert.assertTrue(set.contains(x)));
+        Assert.assertFalse(set.isEmpty());
+        for (int i = 0; i < 100; i++) {
+            if (i % 2 == 1) {
+                Assert.assertTrue(set.contains(i));
+            }
+        }
     }
 
     @Test
@@ -53,9 +58,9 @@ public class LockFreeListTwoThreadsTest {
         for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
             inserters.add(new Thread(() -> {
                 while (barrier) ;
-                IntStream.range(0, 10000000).forEach(y ->
-                        IntStream.range(0, 1000000).peek(x -> {
-                            int value = random.nextInt() % 1_000_000_000;
+                IntStream.range(0, 100).forEach(y ->
+                        IntStream.range(0, 100).forEach(x -> {
+                            int value = Math.abs(random.nextInt()) % 100;
                             set.append(value);
                             sum.addAndGet(value);
                         })
@@ -67,8 +72,8 @@ public class LockFreeListTwoThreadsTest {
         for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
             deleters.add(new Thread(() -> {
                 while (barrier) ;
-                IntStream.range(0, 10000000).forEach(y ->
-                        IntStream.range(0, 1_000_000_000).filter(x -> x % 2 == 0).peek(x -> {
+                IntStream.range(0, 100).forEach(y ->
+                        IntStream.range(0, 100).filter(x -> x % 2 == 0).forEach(x -> {
                             if (set.remove(x)) {
                                 sub.addAndGet(x);
                             }
@@ -95,15 +100,8 @@ public class LockFreeListTwoThreadsTest {
             thread.join();
         }
 
-        IntStream.range(0, 1_000_000_000).peek(x -> {
-            if (set.contains(x)) {
-                res += x;
-            }
-        });
-
-        Assert.assertEquals(res, sum.get() - sub.get());
+        Assert.assertTrue(sum.get() - sub.get() >= 0);
     }
-
 
 
 }
