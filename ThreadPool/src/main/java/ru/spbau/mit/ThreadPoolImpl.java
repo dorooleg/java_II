@@ -6,11 +6,11 @@ import java.util.function.Supplier;
 public class ThreadPoolImpl implements ThreadPool {
 
     private final List<Thread> threads;
-    private final Hashtable<Long, FutureTask> tasks;
+    private final LinkedHashSet<FutureTask> tasks;
 
     ThreadPoolImpl(final int size) {
         threads = new ArrayList<>(size);
-        tasks = new Hashtable<>();
+        tasks = new LinkedHashSet<>();
         for (int i = 0; i < size; i++) {
             Thread thread = new Thread(new ThreadHandler());
             threads.add(thread);
@@ -22,37 +22,49 @@ public class ThreadPoolImpl implements ThreadPool {
         Objects.requireNonNull(task);
         final FutureTask<T> future = new FutureTask<>(task, this);
         synchronized (tasks) {
-            tasks.put(future.getId(), future);
+            tasks.add(future);
             tasks.notifyAll();
-        }
-        synchronized (future) {
-            future.notify();
         }
         return future;
     }
 
-    FutureTask tryPop(final long taskId) {
+    public void add(final FutureTask futureTask) {
+        Objects.requireNonNull(futureTask);
         synchronized (tasks) {
-            return tasks.remove(taskId);
+            tasks.add(futureTask);
+            tasks.notifyAll();
+        }
+        synchronized (futureTask) {
+            futureTask.notifyAll();
+        }
+    }
+
+    FutureTask tryPop(FutureTask task) {
+        synchronized (tasks) {
+            if (tasks.remove(task)) {
+                return task;
+            }
+            return null;
         }
     }
 
     private FutureTask tryPop() {
         synchronized (tasks) {
-            try {
-                return tasks.remove(tasks.entrySet().iterator().next().getKey());
-            } catch (NoSuchElementException d) {
+            if (tasks.isEmpty()) {
                 return null;
             }
+            FutureTask task = tasks.iterator().next();
+            tasks.remove(task);
+            return task;
         }
     }
 
     public void shutdown() {
         synchronized (tasks) {
-            for (FutureTask task : tasks.values()) {
+            for (FutureTask task : tasks) {
                 task.stop();
                 synchronized (task) {
-                    task.notify();
+                    task.notifyAll();
                 }
             }
             tasks.clear();

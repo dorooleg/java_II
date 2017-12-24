@@ -28,4 +28,34 @@ public class ThenApplyTest {
         Assert.assertEquals(new Integer(100), sum.get());
         pool.shutdown();
     }
+
+    @Test
+    public void ThreeTaskLongWait() throws InterruptedException, LightExecutionException {
+        ThreadPoolImpl pool = new ThreadPoolImpl(2);
+
+        LightFuture<Integer> sum = pool.add(() -> { while (true); });
+
+        LightFuture<Integer> sum2 = sum.thenApply(a -> a + 1);
+
+        Thread.sleep(1000);
+
+        LightFuture<Integer> sum3 = pool.add(() -> {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            return 0;
+        });
+
+        Thread.sleep(3000);
+
+        long startTime = System.currentTimeMillis();
+
+        sum3.get();
+
+        long delta = System.currentTimeMillis() - startTime;
+
+        Assert.assertTrue(delta < 1000);
+    }
 }

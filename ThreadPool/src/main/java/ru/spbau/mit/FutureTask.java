@@ -1,32 +1,24 @@
 package ru.spbau.mit;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class FutureTask<T> implements LightFuture<T> {
-
-    // Must be atomic. incrementAndGet
-    private static long globalId;
     private final Supplier<T> task;
-    private final long id;
+    private final ThreadPoolImpl threadPool;
+    private final List<FutureTask> dependencies = new ArrayList<>();
     private volatile T result;
     private volatile LightExecutionException exception;
     private volatile boolean isReady;
-    private final ThreadPoolImpl threadPool;
 
     FutureTask(final Supplier<T> task, final ThreadPoolImpl threadPool) {
         Objects.requireNonNull(task);
         Objects.requireNonNull(threadPool);
         this.task = task;
         this.threadPool = threadPool;
-        synchronized (FutureTask.class) {
-            id = globalId++;
-        }
-    }
-
-    long getId() {
-        return id;
     }
 
     void stop() {
@@ -43,8 +35,12 @@ public class FutureTask<T> implements LightFuture<T> {
     public synchronized T get() throws LightExecutionException {
 
         while (!isReady && exception == null) {
+            if (Thread.currentThread().isInterrupted()) {
+                exception = new LightExecutionException();
+                break;
+            }
 
-            final FutureTask task = threadPool.tryPop(id);
+            final FutureTask task = threadPool.tryPop(this);
 
             if (task != null) {
                 run();
@@ -56,7 +52,7 @@ public class FutureTask<T> implements LightFuture<T> {
                     wait();
                 }
             } catch (InterruptedException e) {
-                throw new LightExecutionException();
+                throw new LightExecutionException(e);
             }
         }
 
@@ -70,22 +66,43 @@ public class FutureTask<T> implements LightFuture<T> {
     @Override
     public <U> LightFuture<U> thenApply(Function<? super T, ? extends U> fn) {
         Objects.requireNonNull(fn);
-        return threadPool.add(() -> {
-            try {
-                return fn.apply(FutureTask.this.get());
-            } catch (LightExecutionException ignored) {
+        synchronized (dependencies) {
+            Supplier<U> supplier = () -> {
+                try {
+                    return fn.apply(get());
+                } catch (LightExecutionException ignored) {
+                }
+                return null;
+            };
+
+            if (isReady()) {
+                return threadPool.add(supplier);
             }
-            return null;
-        });
+
+            FutureTask<U> task = new FutureTask<>(supplier, threadPool);
+            dependencies.add(task);
+            return task;
+        }
     }
 
     void run() {
 
-        result = task.get();
-        isReady = true;
+        try {
+            result = task.get();
+        } catch (Exception e) {
+            exception = new LightExecutionException(e);
+        }
+
+        synchronized (dependencies) {
+            isReady = true;
+            for (FutureTask element : dependencies) {
+                threadPool.add(element);
+            }
+            dependencies.clear();
+        }
 
         synchronized (this) {
-            notify();
+            notifyAll();
         }
     }
 }
