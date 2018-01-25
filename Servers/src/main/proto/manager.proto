@@ -1,0 +1,41 @@
+syntax = "proto2";
+
+package mit;
+
+option java_package = "ru.spbau.mit";
+option java_outer_classname = "ManagerProtos";
+
+message RequestMessage {
+    oneof type {
+        StartMessage start = 1;
+        DisconnectMessage disconnect = 2;
+        StopMessage stop = 3;
+        ResponseMessage response = 4;
+    }
+}
+
+message ResponseMessage {
+    required double averageRequestTime = 1;
+    required double averageResponseTime = 2;
+}
+
+message DisconnectMessage {
+
+}
+
+message StopMessage {
+
+}
+
+message StartMessage {
+    required Type type = 1;
+    enum Type {
+        TCP_ASYNC = 0;
+        TCP_NON_BLOCKING = 1;
+        TCP_CACHED_THREAD = 2;
+        TCP_SINGLE_THREAD = 3;
+        TCP_SINGLE_THREAD_ON_CLIENT = 4;
+        UDP_FIXED_POOL = 5;
+        UDP_SINGLE_THREAD_ON_REQUEST = 6;
+    }
+}

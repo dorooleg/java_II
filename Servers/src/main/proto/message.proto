@@ -1,0 +1,14 @@
+syntax = "proto2";
+
+package mit;
+
+option java_package = "ru.spbau.mit";
+option java_outer_classname = "ArrayProtos";
+
+message ArrayMessage {
+    repeated int32 values = 1 [packed = true];
+
+    enum Type {
+        DISCONNECT = -1;
+    }
+}
