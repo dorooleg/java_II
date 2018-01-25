@@ -1,6 +1,7 @@
 package ru.spbau.mit.servers.tcp;
 
 import com.sun.istack.internal.NotNull;
+import org.apache.log4j.Logger;
 import ru.spbau.mit.ArrayProtos;
 import ru.spbau.mit.algorithms.Sorts;
 import ru.spbau.mit.protocol.TcpProtocol;
@@ -15,23 +16,30 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 public class CachedThreadPoolServer implements IServer {
+    @org.jetbrains.annotations.NotNull
+    private final static Logger logger = Logger.getLogger(CachedThreadPoolServer.class);
 
     @NotNull
     private final List<Statistic> statistics = Collections.synchronizedList(new ArrayList<>());
+    private final int port;
     private ServerSocket serverSocket;
+    @NotNull
     private ExecutorService pool;
-    private int port;
     private Thread thread;
 
-    public CachedThreadPoolServer(int port) throws IOException {
+    public CachedThreadPoolServer(final int port) throws IOException {
+        logger.debug("create");
         this.port = port;
         pool = Executors.newCachedThreadPool();
     }
 
     public void start() throws IOException {
+        logger.debug("start");
         serverSocket = new ServerSocket(port);
         statistics.clear();
         thread = new Thread(() -> {
@@ -47,11 +55,13 @@ public class CachedThreadPoolServer implements IServer {
                         try (Socket socket = finalSocketOut) {
                             while (!Thread.currentThread().isInterrupted()) {
                                 long requestTime = System.nanoTime();
+                                assert socket != null;
                                 final DataInputStream input = new DataInputStream(socket.getInputStream());
                                 final DataOutputStream output = new DataOutputStream(socket.getOutputStream());
                                 final TcpProtocol protocol = new TcpProtocol(input, output);
                                 final ArrayProtos.ArrayMessage array = protocol.getArray();
                                 if (array == null) {
+                                    logger.debug("array is null");
                                     break;
                                 }
                                 long processTime = System.nanoTime();
@@ -62,10 +72,11 @@ public class CachedThreadPoolServer implements IServer {
                                 statistics.add(new Statistic(requestTime, processTime));
                             }
                         } catch (IOException ignored) {
+                            logger.debug("IO error");
                         }
                     });
-                } catch (RejectedExecutionException e) {
-
+                } catch (RejectedExecutionException ignored) {
+                    logger.debug("RejectedExecution");
                 }
             }
         });
@@ -73,7 +84,8 @@ public class CachedThreadPoolServer implements IServer {
     }
 
     public void stop() throws IOException, InterruptedException {
-        pool.shutdown();
+        logger.debug("stop");
+        pool.shutdownNow();
         thread.interrupt();
         serverSocket.close();
         thread.join();

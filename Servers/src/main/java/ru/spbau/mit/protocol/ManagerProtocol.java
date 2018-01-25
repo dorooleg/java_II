@@ -1,6 +1,6 @@
 package ru.spbau.mit.protocol;
 
-import com.sun.istack.internal.NotNull;
+import org.jetbrains.annotations.NotNull;
 import ru.spbau.mit.ManagerProtos;
 
 import java.io.IOException;
@@ -9,7 +9,9 @@ import java.io.OutputStream;
 
 public class ManagerProtocol {
 
+    @NotNull
     private final InputStream input;
+    @NotNull
     private final OutputStream output;
 
     public ManagerProtocol(@NotNull final InputStream input, @NotNull final OutputStream output) {

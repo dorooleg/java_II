@@ -1,6 +1,8 @@
 package ru.spbau.mit;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import org.apache.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 import ru.spbau.mit.servers.IServer;
 import ru.spbau.mit.servers.ServerManager;
 import ru.spbau.mit.servers.statistics.Statistic;
@@ -12,92 +14,101 @@ import java.io.IOException;
 import java.util.List;
 
 public class ServersApplication {
-    public static void main(String[] args) throws IOException, InterruptedException {
-        ServerManager manager = new ServerManager(6660);
+    private final static Logger logger = Logger.getLogger(ServersApplication.class);
+    private final static int SERVER_MANAGER_PORT = 6660;
+    private final static int SERVER_PORT = 6666;
+    private final static int POOL_SIZE = 10;
 
+    public static void main(final String[] args) throws IOException, InterruptedException {
+
+        final ServerManager manager = new ServerManager(SERVER_MANAGER_PORT);
         manager.start();
-
-
-        System.out.println("Start server manager with port: 6660");
-
         manager.accept();
 
         IServer server = null;
 
         while (true) {
             final ManagerProtos.RequestMessage message;
+
             try {
                 message = manager.getMessage();
-            } catch (InvalidProtocolBufferException ignored) {
-                System.out.println("Invalid protocol");
+            } catch (InvalidProtocolBufferException e) {
+                manager.accept();
                 continue;
             }
 
             if (message == null) {
+                logger.debug("Message is null");
                 continue;
             }
 
             if (message.hasDisconnect()) {
-                System.out.println("Disconnect");
-                System.exit(0);
+                disconnect();
             }
 
             if (message.hasStart()) {
-
-                if (server != null) {
-                    server.stop();
-                }
-
-                switch (message.getStart().getType()) {
-                    case TCP_SINGLE_THREAD:
-                        server = new SingleThreadServer(6666);
-                        System.out.println("Created SingleThreadServer");
-                        break;
-                    case TCP_ASYNC:
-                        server = new AsyncServer(6666);
-                        System.out.println("Created AsyncServer");
-                        break;
-                    case TCP_SINGLE_THREAD_ON_CLIENT:
-                        server = new SingleThreadOnClientServer(6666);
-                        System.out.println("Created SingleThreadOnClientServer");
-                        break;
-                    case TCP_CACHED_THREAD:
-                        server = new CachedThreadPoolServer(6666);
-                        System.out.println("Created CachedThreadPoolServer");
-                        break;
-                    case TCP_NON_BLOCKING:
-                        server = new NonBlockingServer(6666, 10);
-                        System.out.println("Created NonBlockingServer");
-                        break;
-                    case UDP_FIXED_POOL:
-                        server = new UdpFixedThreadPoolServer(6666, 10);
-                        System.out.println("Created UdpFixedThreadPoolServer");
-                        break;
-                    case UDP_SINGLE_THREAD_ON_REQUEST:
-                        server = new UdpSingleThreadOnClientServer(6666);
-                        System.out.println("Created UdpSingleThreadOnClientServer");
-                        break;
-                }
-
-                server.start();
+                server = start(server, message.getStart().getType());
             }
 
             if (message.hasStop()) {
-                if (server == null) {
-                    System.err.println("Broken logic!");
-                    continue;
-                }
-                server.stop();
-                List<Statistic> statistics = server.getStatistics();
-
-                final double averageProcessTime = statistics.stream().mapToDouble(Statistic::getProcessTime).average().orElse(0);
-                final double averageRequestTime = statistics.stream().mapToDouble(Statistic::getRequestTime).average().orElse(0);
-                manager.sendResponse(averageRequestTime, averageProcessTime);
+                stop(server, manager);
                 server = null;
             }
         }
+    }
+
+    private static void disconnect() {
+        logger.debug("Disconnect");
+        System.exit(0);
+    }
+
+    private static IServer start(IServer server, @NotNull final ManagerProtos.StartMessage.Type type) throws IOException, InterruptedException {
+        if (server != null) {
+            logger.error("Broken logic. Start without null server");
+            server.stop();
+        }
+
+        server = createServer(type);
+
+        server.start();
+
+        return server;
+    }
+
+    public static void stop(final IServer server, @NotNull final ServerManager manager) throws IOException, InterruptedException {
+        if (server == null) {
+            logger.error("Broken logic. Stop with null server");
+            return;
+        }
+
+        server.stop();
+        final List<Statistic> statistics = server.getStatistics();
+
+        final double averageProcessTime = statistics.stream().mapToDouble(Statistic::getProcessTime).average().orElse(0);
+        final double averageRequestTime = statistics.stream().mapToDouble(Statistic::getRequestTime).average().orElse(0);
+        manager.sendResponse(averageRequestTime, averageProcessTime);
+    }
 
 
+    @NotNull
+    private static IServer createServer(@NotNull final ManagerProtos.StartMessage.Type type) throws IOException {
+        switch (type) {
+            case TCP_SINGLE_THREAD:
+                return new SingleThreadServer(SERVER_PORT);
+            case TCP_ASYNC:
+                return new AsyncServer(SERVER_PORT);
+            case TCP_SINGLE_THREAD_ON_CLIENT:
+                return new SingleThreadOnClientServer(SERVER_PORT);
+            case TCP_CACHED_THREAD:
+                return new CachedThreadPoolServer(SERVER_PORT);
+            case TCP_NON_BLOCKING:
+                return new NonBlockingServer(SERVER_PORT, POOL_SIZE);
+            case UDP_FIXED_POOL:
+                return new UdpFixedThreadPoolServer(SERVER_PORT, POOL_SIZE);
+            case UDP_SINGLE_THREAD_ON_REQUEST:
+                return new UdpSingleThreadOnClientServer(SERVER_PORT);
+        }
 
+        return null;
     }
 }

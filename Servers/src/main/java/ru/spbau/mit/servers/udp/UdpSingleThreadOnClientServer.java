@@ -1,95 +1,61 @@
 package ru.spbau.mit.servers.udp;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.sun.istack.internal.NotNull;
-import ru.spbau.mit.ArrayProtos;
-import ru.spbau.mit.algorithms.Sorts;
+import org.apache.log4j.Logger;
 import ru.spbau.mit.servers.IServer;
 import ru.spbau.mit.servers.statistics.Statistic;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static ru.spbau.mit.Utility.MAX_UDP_SIZE;
+
 public class UdpSingleThreadOnClientServer implements IServer {
-    private static final int MAX_SIZE = 65000;
+    @org.jetbrains.annotations.NotNull
+    private final static Logger logger = Logger.getLogger(UdpSingleThreadOnClientServer.class);
     @NotNull
     private final List<Statistic> statistics = Collections.synchronizedList(new ArrayList<>());
+    @NotNull
+    private final List<Thread> pool = new ArrayList<>();
     private final int port;
     private DatagramSocket serverSocket;
     private Thread thread;
-    private List<Thread> pool = new ArrayList<>();
 
     public UdpSingleThreadOnClientServer(final int port) throws IOException {
+        logger.debug("create");
         this.port = port;
-    }
-
-    static int bytesToInt(byte[] intBytes) {
-        return ByteBuffer.wrap(intBytes).getInt();
     }
 
     public void start() throws IOException {
         serverSocket = new DatagramSocket(port);
         statistics.clear();
+
         thread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
-                byte[] msg = new byte[MAX_SIZE];
-                DatagramPacket packet = new DatagramPacket(msg, msg.length);
+
+                final DatagramPacket packet = new DatagramPacket(new byte[MAX_UDP_SIZE], MAX_UDP_SIZE);
 
                 try {
                     serverSocket.receive(packet);
                 } catch (IOException ignored) {
-                }
-
-                if (packet.getPort() < 0) {
+                    logger.debug("receive IO error");
                     continue;
                 }
 
-                System.out.println("Received " + packet.getPort());
+                if (packet.getPort() < 0) {
+                    logger.debug("negative port");
+                    continue;
+                }
 
-                pool.add(new Thread(() -> {
-                    long requestTime = System.nanoTime();
-                    ArrayProtos.ArrayMessage array;
-
-
-                    int receivedLength = bytesToInt(packet.getData());
-                    byte[] receivedData = new byte[receivedLength];
-
-                    System.arraycopy(packet.getData(), 4, receivedData, 0, receivedLength);
-
-                    try {
-                        array = ArrayProtos.ArrayMessage.parseFrom(receivedData);
-                    } catch (InvalidProtocolBufferException e) {
-                        return;
-                    }
-
-                    if (array == null) {
-                        return;
-                    }
-
-                    long processTime = System.nanoTime();
-                    final List<Integer> sortedArray = Sorts.bubbleSort(array.getValuesList());
-                    processTime = System.nanoTime() - processTime;
-                    packet.getAddress();
-
-                    final byte[] bytes = ArrayProtos.ArrayMessage.newBuilder().addAllValues(sortedArray).build().toByteArray();
-                    DatagramPacket sendPacket = new DatagramPacket(bytes, bytes.length, packet.getAddress(), packet.getPort());
-                    System.out.println("Send " + packet.getPort());
-                    try {
-                        serverSocket.send(sendPacket);
-                    } catch (IOException e) {
-                        return;
-                    }
-                    requestTime = System.nanoTime() - requestTime;
-                    statistics.add(new Statistic(requestTime, processTime));
-                }));
+                pool.add(new Thread(new UdpTask(packet, serverSocket, statistics)));
                 pool.get(pool.size() - 1).start();
             }
         });
+
         thread.start();
     }
 
@@ -97,6 +63,7 @@ public class UdpSingleThreadOnClientServer implements IServer {
         for (Thread thread : pool) {
             thread.interrupt();
         }
+
         thread.interrupt();
         serverSocket.close();
         pool.clear();

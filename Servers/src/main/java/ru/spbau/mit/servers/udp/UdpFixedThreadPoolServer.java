@@ -1,95 +1,66 @@
 package ru.spbau.mit.servers.udp;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.sun.istack.internal.NotNull;
-import ru.spbau.mit.ArrayProtos;
-import ru.spbau.mit.algorithms.Sorts;
+import org.apache.log4j.Logger;
 import ru.spbau.mit.servers.IServer;
 import ru.spbau.mit.servers.statistics.Statistic;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static ru.spbau.mit.servers.udp.UdpSingleThreadOnClientServer.bytesToInt;
+import static ru.spbau.mit.Utility.MAX_UDP_SIZE;
+
 
 public class UdpFixedThreadPoolServer implements IServer {
+    @org.jetbrains.annotations.NotNull
+    private final static Logger logger = Logger.getLogger(UdpFixedThreadPoolServer.class);
 
-    private static final int MAX_SIZE = 65000;
     @NotNull
     private final ExecutorService pool;
+    @NotNull
     private final List<Statistic> statistics = Collections.synchronizedList(new ArrayList<>());
     private final int port;
     private DatagramSocket serverSocket;
 
-    public UdpFixedThreadPoolServer(final int port, int poolSize) throws IOException {
+    public UdpFixedThreadPoolServer(final int port, final int poolSize) throws IOException {
+        logger.debug("create");
         this.port = port;
         pool = Executors.newFixedThreadPool(poolSize);
     }
 
     public void start() throws IOException {
+        logger.debug("start");
         serverSocket = new DatagramSocket(port);
         statistics.clear();
         pool.submit(() -> {
             while (!Thread.currentThread().isInterrupted()) {
-                byte[] msg = new byte[MAX_SIZE];
-                DatagramPacket packet = new DatagramPacket(msg, msg.length);
+                DatagramPacket packet = new DatagramPacket(new byte[MAX_UDP_SIZE], MAX_UDP_SIZE);
 
                 try {
                     serverSocket.receive(packet);
                 } catch (IOException ignored) {
-                }
-
-                if (packet.getPort() < 0) {
+                    logger.debug("receive IO error");
                     continue;
                 }
 
-                long requestTime = System.nanoTime();
-
-                int receivedLength = bytesToInt(packet.getData());
-                byte[] receivedData = new byte[receivedLength];
-
-                System.arraycopy(packet.getData(), 4, receivedData, 0, receivedLength);
-
-                ArrayProtos.ArrayMessage array;
-
-                try {
-                    array = ArrayProtos.ArrayMessage.parseFrom(receivedData);
-                } catch (InvalidProtocolBufferException e) {
-                    System.out.println("Parse error");
-                    return;
+                if (packet.getPort() < 0) {
+                    logger.debug("negative port");
+                    continue;
                 }
 
-                if (array == null) {
-                    return;
-                }
-
-                long processTime = System.nanoTime();
-                final List<Integer> sortedArray = Sorts.bubbleSort(array.getValuesList());
-                processTime = System.nanoTime() - processTime;
-                packet.getAddress();
-
-                final byte[] bytes = ArrayProtos.ArrayMessage.newBuilder().addAllValues(sortedArray).build().toByteArray();
-                DatagramPacket sendPacket = new DatagramPacket(bytes, bytes.length, packet.getAddress(), packet.getPort());
-
-                try {
-                    serverSocket.send(sendPacket);
-                } catch (IOException e) {
-                    return;
-                }
-                requestTime = System.nanoTime() - requestTime;
-                statistics.add(new Statistic(requestTime, processTime));
+                new UdpTask(packet, serverSocket, statistics).run();
             }
         });
     }
 
     public void stop() throws IOException, InterruptedException {
+        logger.debug("stop");
         pool.shutdownNow();
         serverSocket.close();
     }

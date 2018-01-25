@@ -1,6 +1,6 @@
 package ru.spbau.mit.clients;
 
-import com.sun.istack.internal.NotNull;
+import org.jetbrains.annotations.NotNull;
 import ru.spbau.mit.ManagerProtos;
 import ru.spbau.mit.protocol.ManagerProtocol;
 
@@ -9,7 +9,9 @@ import java.net.Socket;
 
 public class ClientManager {
 
+    @NotNull
     private final String host;
+    @NotNull
     private final int port;
     private Socket socket;
     private ManagerProtocol protocol;
@@ -37,7 +39,7 @@ public class ClientManager {
     }
 
     public void stop() throws IOException {
-        protocol.sendStop();
+        socket.close();
     }
 
     public ManagerProtos.RequestMessage getMessage() throws IOException {

@@ -1,5 +1,6 @@
 package ru.spbau.mit.protocol;
 
+import org.jetbrains.annotations.NotNull;
 import ru.spbau.mit.ArrayProtos;
 
 import java.io.DataInputStream;
@@ -7,10 +8,12 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 
 public class TcpProtocol {
+    @NotNull
     private final DataInputStream input;
+    @NotNull
     private final DataOutputStream output;
 
-    public TcpProtocol(DataInputStream input, DataOutputStream output) {
+    public TcpProtocol(@NotNull final DataInputStream input, @NotNull final DataOutputStream output) {
         this.input = input;
         this.output = output;
     }

@@ -1,6 +1,8 @@
 package ru.spbau.mit.servers.tcp;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import org.apache.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 import ru.spbau.mit.ArrayProtos;
 import ru.spbau.mit.algorithms.Sorts;
 import ru.spbau.mit.servers.IServer;
@@ -15,13 +17,18 @@ import java.nio.channels.CompletionHandler;
 import java.util.*;
 
 public class AsyncServer implements IServer {
+    @org.jetbrains.annotations.NotNull
+    private final static Logger logger = Logger.getLogger(AsyncServer.class);
 
+    @NotNull
     private final Set<AsynchronousSocketChannel> channels = Collections.synchronizedSet(new HashSet<>());
+    @NotNull
     private final List<Statistic> statistics = Collections.synchronizedList(new ArrayList<>());
-    private int port;
+    private final int port;
     private AsynchronousServerSocketChannel serverChannel;
 
-    public AsyncServer(int port) {
+    public AsyncServer(final int port) {
+        logger.debug("create");
         this.port = port;
     }
 
@@ -35,6 +42,7 @@ public class AsyncServer implements IServer {
     }
 
     private void handleError(Throwable e) {
+        logger.debug("handleError");
     }
 
     private void readArray(AsynchronousSocketChannel channel) {
@@ -44,6 +52,7 @@ public class AsyncServer implements IServer {
         channel.read(intReadBuf, null, new CompletionHandler<Integer, Object>() {
             @Override
             public void completed(Integer result, Object attachment) {
+                logger.debug("read");
 
                 if (intReadBuf.hasRemaining()) {
                     channel.read(intReadBuf, null, this);
@@ -100,11 +109,12 @@ public class AsyncServer implements IServer {
         byte[] data = new byte[bs.length + Integer.BYTES];
 
         System.arraycopy(ByteBuffer.allocate(Integer.BYTES).putInt(0, bs.length).array(), 0, data, 0, Integer.BYTES);
-        System.arraycopy(bs, 0, data, 4, bs.length);
+        System.arraycopy(bs, 0, data, Integer.BYTES, bs.length);
 
         channel.write(ByteBuffer.wrap(data), null, new CompletionHandler<Integer, Object>() {
                     @Override
                     public void completed(Integer result, Object attachment) {
+                        logger.debug("write");
                         long endReqTime = System.nanoTime();
                         statistics.add(new Statistic(endReqTime - startRequestTime, procTime));
                         readArray(channel);
@@ -119,11 +129,13 @@ public class AsyncServer implements IServer {
     }
 
     public void start() throws IOException {
+        logger.debug("start");
         serverChannel = AsynchronousServerSocketChannel.open();
         serverChannel.bind(new InetSocketAddress(port));
         serverChannel.accept(null, new CompletionHandler<AsynchronousSocketChannel, Object>() {
             @Override
             public void completed(AsynchronousSocketChannel result, Object attachment) {
+                logger.debug("accept");
                 channels.add(result);
 
                 readArray(result);
@@ -133,17 +145,20 @@ public class AsyncServer implements IServer {
 
             @Override
             public void failed(Throwable exc, Object attachment) {
+                handleError(exc);
             }
         });
     }
 
     public void stop() throws IOException {
+        logger.debug("stop");
         serverChannel.close();
         for (AsynchronousSocketChannel chanel : channels) {
             chanel.close();
         }
     }
 
+    @NotNull
     public List<Statistic> getStatistics() {
         return statistics;
     }

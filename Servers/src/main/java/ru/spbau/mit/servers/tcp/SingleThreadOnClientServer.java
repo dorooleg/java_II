@@ -1,6 +1,7 @@
 package ru.spbau.mit.servers.tcp;
 
 import com.sun.istack.internal.NotNull;
+import org.apache.log4j.Logger;
 import ru.spbau.mit.ArrayProtos;
 import ru.spbau.mit.algorithms.Sorts;
 import ru.spbau.mit.protocol.TcpProtocol;
@@ -17,25 +18,33 @@ import java.util.Collections;
 import java.util.List;
 
 public class SingleThreadOnClientServer implements IServer {
+    @org.jetbrains.annotations.NotNull
+    private final static Logger logger = Logger.getLogger(SingleThreadOnClientServer.class);
+
     @NotNull
     private final List<Statistic> statistics = Collections.synchronizedList(new ArrayList<>());
     private final int port;
     private ServerSocket serverSocket;
     private Thread thread;
+    @NotNull
     private List<Thread> pool = new ArrayList<>();
 
     public SingleThreadOnClientServer(final int port) throws IOException {
+        logger.debug("create");
         this.port = port;
     }
+
     public void start() throws IOException {
+        logger.debug("start");
         serverSocket = new ServerSocket(port);
         statistics.clear();
         thread = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
-                Socket socketOut = null;
+                Socket socketOut;
                 try {
                     socketOut = serverSocket.accept();
                 } catch (IOException ignored) {
+                    logger.debug("IO error");
                     return;
                 }
                 Socket finalSocketOut = socketOut;
@@ -48,6 +57,7 @@ public class SingleThreadOnClientServer implements IServer {
                             final TcpProtocol protocol = new TcpProtocol(input, output);
                             final ArrayProtos.ArrayMessage array = protocol.getArray();
                             if (array == null) {
+                                logger.debug("array is null");
                                 break;
                             }
                             long processTime = System.nanoTime();
@@ -67,6 +77,7 @@ public class SingleThreadOnClientServer implements IServer {
     }
 
     public void stop() throws IOException, InterruptedException {
+        logger.debug("stop");
         for (Thread thread : pool) {
             thread.interrupt();
         }
